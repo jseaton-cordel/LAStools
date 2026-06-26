@@ -189,7 +189,15 @@ BOOL LASwriterLAS::open(ByteStreamOut* stream, const LASheader* header, U32 comp
   {
     laszip = new LASzip();
     laszip->setup(point.num_items, point.items, compressor);
-    if (chunk_size > -1) laszip->set_chunk_size((U32)chunk_size);
+    if (chunk_size == 0 && (point_data_format > 5))
+    {
+      // adaptive (variably-sized) chunking: store the conventional 0xFFFFFFFF
+      // sentinel in the LASzip VLR so COPC and other strict LAZ readers
+      // (ArcGIS, laspy/lazrs) recognize variable chunks. Writing 0 produces
+      // files that LAStools itself can read but those readers reject.
+      laszip->set_chunk_size(U32_MAX);
+    }
+    else if (chunk_size > -1) laszip->set_chunk_size((U32)chunk_size);
     if (compressor == LASZIP_COMPRESSOR_NONE) laszip->request_version(0);
     else if (chunk_size == 0 && (point_data_format <= 5)) {
       laserror("adaptive chunking is depricated for point type %d. only available for new LAS 1.4 point types 6 or higher.", point_data_format); 
