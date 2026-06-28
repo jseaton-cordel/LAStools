@@ -51,13 +51,13 @@ BOOL LASwriterLAS::refile(FILE* file)
   return ((ByteStreamOutFile*)stream)->refile(file);
 }
 
-BOOL LASwriterLAS::open(const LASheader* header, U32 compressor, I32 requested_version, I32 chunk_size)
+BOOL LASwriterLAS::open(const LASheader* header, U32 compressor, I32 requested_version, U32 chunk_size)
 {
   ByteStreamOut* out = new ByteStreamOutNil();
   return open(out, header, compressor, requested_version, chunk_size);
 }
 
-BOOL LASwriterLAS::open(const char* file_name, const LASheader* header, U32 compressor, I32 requested_version, I32 chunk_size, I32 io_buffer_size)
+BOOL LASwriterLAS::open(const char* file_name, const LASheader* header, U32 compressor, I32 requested_version, U32 chunk_size, I32 io_buffer_size)
 {
   if (file_name == 0)
   {
@@ -87,7 +87,7 @@ BOOL LASwriterLAS::open(const char* file_name, const LASheader* header, U32 comp
   return open(out, header, compressor, requested_version, chunk_size);
 }
 
-BOOL LASwriterLAS::open(FILE* file, const LASheader* header, U32 compressor, I32 requested_version, I32 chunk_size)
+BOOL LASwriterLAS::open(FILE* file, const LASheader* header, U32 compressor, I32 requested_version, U32 chunk_size)
 {
   if (file == 0)
   {
@@ -114,7 +114,7 @@ BOOL LASwriterLAS::open(FILE* file, const LASheader* header, U32 compressor, I32
   return open(out, header, compressor, requested_version, chunk_size);
 }
 
-BOOL LASwriterLAS::open(std::ostream& stream, const LASheader* header, U32 compressor, I32 requested_version, I32 chunk_size)
+BOOL LASwriterLAS::open(std::ostream& stream, const LASheader* header, U32 compressor, I32 requested_version, U32 chunk_size)
 {
   ByteStreamOut* out;
   if (Endian::IS_LITTLE_ENDIAN)
@@ -125,7 +125,7 @@ BOOL LASwriterLAS::open(std::ostream& stream, const LASheader* header, U32 compr
   return open(out, header, compressor, requested_version, chunk_size);
 }
 
-BOOL LASwriterLAS::open(ByteStreamOut* stream, const LASheader* header, U32 compressor, I32 requested_version, I32 chunk_size)
+BOOL LASwriterLAS::open(ByteStreamOut* stream, const LASheader* header, U32 compressor, I32 requested_version, U32 chunk_size)
 {
   U32 i, j;
 
@@ -189,18 +189,18 @@ BOOL LASwriterLAS::open(ByteStreamOut* stream, const LASheader* header, U32 comp
   {
     laszip = new LASzip();
     laszip->setup(point.num_items, point.items, compressor);
-    if (chunk_size == 0 && (point_data_format > 5))
-    {
-      // adaptive (variably-sized) chunking: store the conventional 0xFFFFFFFF
-      // sentinel in the LASzip VLR so COPC and other strict LAZ readers
-      // (ArcGIS, laspy/lazrs) recognize variable chunks. Writing 0 produces
-      // files that LAStools itself can read but those readers reject.
-      laszip->set_chunk_size(U32_MAX);
-    }
-    else if (chunk_size > -1) laszip->set_chunk_size((U32)chunk_size);
+    // chunk_size semantics:
+    //   0 or U32_MAX -> adaptive (variably-sized) chunks. Always stored in the
+    //                   LASzip VLR as the conventional 0xFFFFFFFF sentinel that the
+    //                   COPC spec and strict LAZ readers require for variable chunks. 
+	//                   Only valid for the new LAS 1.4 point types (6 and higher).
+    //   other        -> fixed-size chunks of that many points.
+    const BOOL adaptive_chunking = (chunk_size == 0) || (chunk_size == U32_MAX);
+    if (adaptive_chunking) laszip->set_chunk_size(U32_MAX);
+    else laszip->set_chunk_size(chunk_size);
     if (compressor == LASZIP_COMPRESSOR_NONE) laszip->request_version(0);
-    else if (chunk_size == 0 && (point_data_format <= 5)) {
-      laserror("adaptive chunking is depricated for point type %d. only available for new LAS 1.4 point types 6 or higher.", point_data_format); 
+    else if (adaptive_chunking && (point_data_format <= 5)) {
+      laserror("adaptive chunking is depricated for point type %d. only available for new LAS 1.4 point types 6 or higher.", point_data_format);
       return FALSE;
     }
     else if (requested_version) laszip->request_version(requested_version);
@@ -644,7 +644,7 @@ BOOL LASwriterLAS::open(ByteStreamOut* stream, const LASheader* header, U32 comp
     //     U8   version_minor             1 byte
     //     U16  version_revision          2 bytes
     //     U32  options                   4 bytes
-    //     I32  chunk_size                4 bytes
+    //     U32  chunk_size                4 bytes (0xFFFFFFFF = variable/adaptive chunks)
     //     I64  number_of_special_evlrs   8 bytes
     //     I64  offset_to_special_evlrs   8 bytes
     //     U16  num_items                 2 bytes

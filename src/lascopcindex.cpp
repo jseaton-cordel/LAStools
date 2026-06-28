@@ -645,11 +645,9 @@ int main(int argc, char* argv[])
 
   LASwriteOpener laswriteopener;
   laswriteopener.set_format(LAS_TOOLS_FORMAT_LAZ);
-  // COPC stores each octree node as its own variably-sized LAZ chunk. Request
-  // adaptive (variable) chunking; LASlib emits the conventional 0xFFFFFFFF
-  // chunk-size sentinel into the LASzip VLR (see LASwriterLAS::open) so strict
-  // COPC readers (ArcGIS, laspy/lazrs) accept the file.
-  laswriteopener.set_chunk_size(0);
+  // COPC stores each octree node as its own variably-sized LAZ chunk. 
+  // Request variable chunking via the 0xFFFFFFFF sentinel.
+  laswriteopener.set_chunk_size(U32_MAX);
 
   GeoProjectionConverter geoprojectionconverter;
 
